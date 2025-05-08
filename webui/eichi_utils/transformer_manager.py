@@ -4,7 +4,7 @@ import torch
 import traceback
 from accelerate import init_empty_weights
 from diffusers_helper.models.hunyuan_video_packed import HunyuanVideoTransformer3DModelPacked
-from diffusers_helper.memory import DynamicSwapInstaller
+from diffusers_helper.memory import DynamicSwapInstaller, device_type
 from locales.i18n_extended import translate
 
 class TransformerManager:
@@ -202,9 +202,10 @@ class TransformerManager:
                 # 明示的にガベージコレクションを実行
                 import gc
                 gc.collect()
-                # CUDAキャッシュもクリア
-                if torch.cuda.is_available():
+                # デバイスに応じたキャッシュクリア
+                if device_type == 'cuda':
                     torch.cuda.empty_cache()
+                # MPS doesn't have an explicit empty_cache method
 
             print(translate("\ntransformerをリロードします..."))
             print(translate("適用するtransformer設定:"))
@@ -317,7 +318,12 @@ class TransformerManager:
             
             # VRAMモードに応じた設定
             if not self.next_state['high_vram']:
-                DynamicSwapInstaller.install_model(self.transformer, device=self.device)
+                # MPSデバイスの場合はDynamicSwapInstallerをスキップ
+                if device_type == 'cuda':
+                    DynamicSwapInstaller.install_model(self.transformer, device=self.device)
+                else:
+                    # MPSデバイスの場合は直接デバイスに移動
+                    self.transformer.to(self.device)
             else:
                 self.transformer.to(self.device)
             

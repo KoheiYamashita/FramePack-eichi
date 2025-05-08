@@ -1,7 +1,7 @@
 import torch
 import traceback
 import gc
-from diffusers_helper.memory import DynamicSwapInstaller
+from diffusers_helper.memory import DynamicSwapInstaller, device_type
 from locales.i18n_extended import translate
 
 class TextEncoderManager:
@@ -145,8 +145,14 @@ class TextEncoderManager:
             
             # VRAMモードに応じた設定
             if not self.next_state['high_vram']:
-                DynamicSwapInstaller.install_model(self.text_encoder, device=self.device)
-                DynamicSwapInstaller.install_model(self.text_encoder_2, device=self.device)
+                # MPSデバイスの場合はDynamicSwapInstallerをスキップ
+                if device_type == 'cuda':
+                    DynamicSwapInstaller.install_model(self.text_encoder, device=self.device)
+                    DynamicSwapInstaller.install_model(self.text_encoder_2, device=self.device)
+                else:
+                    # MPSデバイスの場合は直接デバイスに移動
+                    self.text_encoder.to(self.device)
+                    self.text_encoder_2.to(self.device)
             else:
                 self.text_encoder.to(self.device)
                 self.text_encoder_2.to(self.device)

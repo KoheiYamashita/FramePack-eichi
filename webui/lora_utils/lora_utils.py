@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 # 国際化対応
 from locales.i18n_extended import translate as _
+from diffusers_helper.memory import device_type
 
 def merge_lora_to_state_dict(
     model_files:list[str], lora_files: list[str], multipliers: list[float], fp8_enabled: bool, device: torch.device
@@ -273,7 +274,8 @@ def load_safetensors_with_fp8_optimization(
     """
     Load state dict from safetensors files and merge LoRA weights into the state dict with fp8 optimization if needed.
     """
-    if fp8_optimization:
+    # Skip FP8 optimization for MPS devices
+    if fp8_optimization and device_type != 'mps':
         from lora_utils.fp8_optimization_utils import optimize_state_dict_with_fp8_on_the_fly
 
         # 最適化のターゲットと除外キーを設定
@@ -286,6 +288,9 @@ def load_safetensors_with_fp8_optimization(
             model_files, device, TARGET_KEYS, EXCLUDE_KEYS, move_to_device=False, weight_hook=weight_hook
         )
     else:
+        if fp8_optimization and device_type == 'mps':
+            print(_("警告: MPSデバイスではFP8最適化がサポートされていないため、スキップします"))
+            
         from lora_utils.safetensors_utils import MemoryEfficientSafeOpen
 
         state_dict = {}

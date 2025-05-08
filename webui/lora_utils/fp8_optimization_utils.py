@@ -345,6 +345,12 @@ def check_fp8_support():
     Returns:
         tuple: (E4M3サポート, E5M2サポート, scaled_mmサポート)
     """
+    # MPS devices don't support FP8
+    from diffusers_helper.memory import device_type
+    if device_type == 'mps':
+        print(translate("警告: MPSデバイスではFP8サポートが利用できません"))
+        return False, False, False
+        
     # FP8サポートのチェック
     has_e4m3 = hasattr(torch, 'float8_e4m3fn')
     has_e5m2 = hasattr(torch, 'float8_e5m2')

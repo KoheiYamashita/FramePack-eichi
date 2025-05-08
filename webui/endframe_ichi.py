@@ -115,7 +115,7 @@ from diffusers_helper.hunyuan import encode_prompt_conds, vae_decode, vae_encode
 from diffusers_helper.utils import save_bcthw_as_mp4, crop_or_pad_yield_mask, soft_append_bcthw, resize_and_center_crop, state_dict_weighted_merge, state_dict_offset_merge, generate_timestamp
 from diffusers_helper.models.hunyuan_video_packed import HunyuanVideoTransformer3DModelPacked
 from diffusers_helper.pipelines.k_diffusion_hunyuan import sample_hunyuan
-from diffusers_helper.memory import cpu, gpu, get_cuda_free_memory_gb, move_model_to_device_with_memory_preservation, offload_model_from_device_for_memory_preservation, fake_diffusers_current_device, DynamicSwapInstaller, unload_complete_models, load_model_as_complete
+from diffusers_helper.memory import cpu, gpu, device_type, get_cuda_free_memory_gb, move_model_to_device_with_memory_preservation, offload_model_from_device_for_memory_preservation, fake_diffusers_current_device, DynamicSwapInstaller, unload_complete_models, load_model_as_complete
 from diffusers_helper.thread_utils import AsyncStream, async_run
 from diffusers_helper.gradio.progress_bar import make_progress_bar_css, make_progress_bar_html
 from transformers import SiglipImageProcessor, SiglipVisionModel
@@ -125,10 +125,18 @@ from diffusers_helper.bucket_tools import find_nearest_bucket
 from eichi_utils.transformer_manager import TransformerManager
 from eichi_utils.text_encoder_manager import TextEncoderManager
 
+# Get available memory and determine if high VRAM mode should be used
 free_mem_gb = get_cuda_free_memory_gb(gpu)
-high_vram = free_mem_gb > 100
 
-print(translate('Free VRAM {0} GB').format(free_mem_gb))
+# For MPS (Apple Silicon), use a different threshold
+if device_type == 'mps':
+    # Apple Silicon typically has unified memory, so we use a lower threshold
+    high_vram = free_mem_gb > 12  # Lower threshold for Apple Silicon
+else:
+    # Original threshold for CUDA devices
+    high_vram = free_mem_gb > 100
+
+print(translate('Free Memory {0} GB').format(free_mem_gb))
 print(translate('High-VRAM Mode: {0}').format(high_vram))
 
 # グローバルなモデル状態管理インスタンスを作成
@@ -174,7 +182,9 @@ image_encoder.requires_grad_(False)
 
 if not high_vram:
     # DynamicSwapInstaller is same as huggingface's enable_sequential_offload but 3x faster
-    DynamicSwapInstaller.install_model(transformer, device=gpu) # クラスを操作するので仮想デバイス上のtransformerでもOK
+    # Only use DynamicSwapInstaller for CUDA devices, as it may not work properly with MPS
+    if device_type == 'cuda':
+        DynamicSwapInstaller.install_model(transformer, device=gpu) # クラスを操作するので仮想デバイス上のtransformerでもOK
 else:
     image_encoder.to(gpu)
     vae.to(gpu)
